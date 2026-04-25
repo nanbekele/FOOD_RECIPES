@@ -1,0 +1,71 @@
+
+
+services:
+  # 1️⃣ Postgres Database
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: foodrecipes
+    ports:
+      - "5433:5432"  # host 5433 → container 5432
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      retries: 10
+
+  # 2️⃣ Hasura GraphQL Engine
+  hasura:
+    image: hasura/graphql-engine:v2.36.0
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:mysecretpassword@postgres:5432/foodrecipes
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_ADMIN_SECRET: myhasurasecret
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: public
+      HASURA_GRAPHQL_CORS_DOMAIN: '*'
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"s9d8f7g6h5j4k3l2q1w0e9r8t7y6u5i4o3p2a1s0"}'
+
+  # 3️⃣ Go Backend (Gin)
+  backend:
+    build:
+      context: ./food-recipes-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    depends_on:
+      - hasura
+    environment:
+      HASURA_GRAPHQL_ENDPOINT: http://hasura:8080/v1/graphql
+      HASURA_GRAPHQL_ADMIN_SECRET: myhasurasecret
+      JWT_SECRET: s9d8f7g6h5j4k3l2q1w0e9r8t7y6u5i4o3p2a1s0
+      POSTGRES_DSN: postgres://postgres:mysecretpassword@postgres:5432/foodrecipes?sslmode=disable
+      CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000"
+      CLOUDINARY_URL: ${CLOUDINARY_URL}
+    command: ./server
+
+  # 4️⃣ Nuxt Frontend
+  frontend:
+    build:
+      context: ./food-recipes-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      NUXT_PUBLIC_HASURA_ENDPOINT: http://localhost:8082/v1/graphql
+      NUXT_PUBLIC_BACKEND_ENDPOINT: http://localhost:8081
+      CLOUDINARY_URL: ${CLOUDINARY_URL}
+      
+    command: npm run dev
+
+volumes:
+  db_data:
