@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE users
+  DROP COLUMN IF EXISTS role,
+  DROP COLUMN IF EXISTS is_verified;
+
+COMMIT;
