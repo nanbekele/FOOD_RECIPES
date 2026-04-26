@@ -13,7 +13,14 @@
             <p class="text-gray-600" v-if="user.bio">{{ user.bio }}</p>
           </div>
         </div>
-        <button class="px-3 py-2 rounded bg-gray-100">Follow</button>
+        <button
+          v-if="canFollow"
+          class="px-3 py-2 rounded bg-gray-100"
+          :disabled="followLoading"
+          @click="toggleFollow"
+        >
+          {{ isFollowing ? 'Unfollow' : 'Follow' }}
+        </button>
       </div>
 
       <div class="rounded-xl bg-white border border-gray-200 p-4 shadow-sm">
@@ -34,7 +41,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuery } from '@vue/apollo-composable'
 import gql from 'graphql-tag'
@@ -44,23 +51,81 @@ import RecipeCard from '~/components/RecipeCard.vue'
 const route = useRoute()
 const userId = parseInt(route.params.id, 10)
 
-const { result } = useQuery(gql`
-  query($id: Int!) {
-    users_by_pk(id: $id) { id name bio role is_verified }
-    recipes(where: { user_id: { _eq: $id } }) {
-      id
-      title
-      description
-      featured_image
-      average_rating
-      favorites_aggregate { aggregate { count } }
-    }
-  }
-`, { id: userId })
+const backend = useRuntimeConfig().public.NUXT_PUBLIC_BACKEND_ENDPOINT
+const userRaw = ref({ id: userId, name: '', bio: '', role: '', is_verified: false })
+const recipesRaw = ref([])
+const pageLoading = ref(true)
+const pageError = ref('')
 
-const user = computed(() => result.value?.users_by_pk || { id: userId, name: 'Chef', bio: '' })
-const recipes = computed(() => result.value?.recipes || [])
+async function fetchProfile() {
+  pageLoading.value = true
+  pageError.value = ''
+  try {
+    const [uRes, rRes] = await Promise.all([
+      fetch(`${backend}/users/${userId}`),
+      fetch(`${backend}/users/${userId}/recipes`)
+    ])
+    const uData = await uRes.json()
+    const rData = await rRes.json()
+    if (!uRes.ok) throw new Error(uData?.error || 'Failed to load user')
+    if (!rRes.ok) throw new Error(rData?.error || 'Failed to load recipes')
+    userRaw.value = uData?.user || userRaw.value
+    recipesRaw.value = rData?.recipes || []
+  } catch (e) {
+    pageError.value = e?.message || 'Failed to load'
+  }
+  pageLoading.value = false
+}
+
+onMounted(fetchProfile)
+
+const user = computed(() => userRaw.value)
+const recipes = computed(() => recipesRaw.value)
 const initials = computed(() => (user.value.name || '').split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2))
+
+const isLoggedIn = computed(() => {
+  if (typeof window === 'undefined') return false
+  return !!localStorage.getItem('token')
+})
+const canFollow = computed(() => isLoggedIn.value && viewerId.value > 0 && viewerId.value !== userId)
+
+const isFollowing = ref(false)
+const followLoading = ref(false)
+
+async function refreshFollowStatus() {
+  if (!canFollow.value) return
+  try {
+    const token = localStorage.getItem('token') || ''
+    const res = await fetch(`${backend}/users/${userId}/following`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    const data = await res.json()
+    if (!res.ok) return
+    isFollowing.value = !!data?.following
+  } catch {
+    // ignore
+  }
+}
+
+onMounted(refreshFollowStatus)
+
+async function toggleFollow() {
+  if (!canFollow.value || followLoading.value) return
+  followLoading.value = true
+  try {
+    const token = localStorage.getItem('token') || ''
+    const res = await fetch(`${backend}/users/${userId}/follow`, {
+      method: isFollowing.value ? 'DELETE' : 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data?.error || 'Request failed')
+    isFollowing.value = !isFollowing.value
+  } catch (e) {
+    alert(e?.message || 'Request failed')
+  }
+  followLoading.value = false
+}
 
 // Viewer favorites for clickable state
 const viewerId = computed(() => {
