@@ -150,13 +150,16 @@ const closeMenuAfterNavigation = async () => {
 
 const logout = () => {
   if (process.client) {
+    const isConfirmed = window.confirm('Are you sure you want to log out?')
+    if (!isConfirmed) return
+
     localStorage.removeItem('token')
     localStorage.removeItem('userName')
     localStorage.removeItem('userEmail')
     localStorage.removeItem('userId')
     localStorage.removeItem('role')
     localStorage.removeItem('is_verified')
+    window.location.href = '/'
   }
-  window.location.href = '/'
 }
 </script>
