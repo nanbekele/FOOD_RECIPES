@@ -89,9 +89,7 @@ const navItems = [
   { name: 'Recipes', to: '/recipes' },
   { name: 'Top fav', to: '/top-fav' },
   { name: 'Chefs', to: '/chefs' },
-  { name: 'Food News', to: '/news' },
-  { name: 'Shop', to: '/shop' },
-  { name: 'Sweepstakes', to: '/sweepstakes' }
+  { name: 'Food News', to: '/news' }
 ]
 
 const isLoggedIn = ref(false)

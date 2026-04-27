@@ -49,7 +49,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import Navbar from '~/components/Navbar.vue'
 
 const backend = useRuntimeConfig().public.NUXT_PUBLIC_BACKEND_ENDPOINT
@@ -65,6 +66,13 @@ const error = ref('')
 const uploading = ref(false)
 const submitting = ref(false)
 
+const router = useRouter()
+
+function withBase(path) {
+  const base = router.currentRoute.value?.path?.startsWith('/app') ? '/app' : ''
+  return `${base}${path}`
+}
+
 const isLoggedIn = computed(() => {
   if (typeof window === 'undefined') return false
   return !!localStorage.getItem('token')
@@ -74,6 +82,9 @@ async function onImageSelected(e) {
   const file = (e.target.files && e.target.files[0]) ? e.target.files[0] : null
   if (!file) return
 
+  if (imagePreview.value && String(imagePreview.value).startsWith('blob:')) {
+    URL.revokeObjectURL(imagePreview.value)
+  }
   imagePreview.value = URL.createObjectURL(file)
   uploading.value = true
   error.value = ''
@@ -97,10 +108,16 @@ async function onImageSelected(e) {
   uploading.value = false
 }
 
+onBeforeUnmount(() => {
+  if (imagePreview.value && String(imagePreview.value).startsWith('blob:')) {
+    URL.revokeObjectURL(imagePreview.value)
+  }
+})
+
 async function submit() {
   error.value = ''
   if (!isLoggedIn.value) {
-    error.value = 'You must be logged in to create news.'
+    await navigateTo(withBase('/login'))
     return
   }
   if (!title.value.trim()) {
@@ -128,7 +145,7 @@ async function submit() {
     const data = await res.json()
     if (!res.ok) throw new Error(data?.error || 'Create failed')
 
-    await navigateTo('/news')
+    await navigateTo(withBase('/news'))
   } catch (e3) {
     error.value = e3?.message || 'Create failed'
   }

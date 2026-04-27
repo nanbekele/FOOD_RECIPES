@@ -176,63 +176,55 @@ const currentRating = computed(() => {
 const favoriteCount = computed(() => recipe.value?.favorites_aggregate?.aggregate?.count ?? 0)
 const isFavorited = computed(() => (recipe.value?.my_favorite?.length ?? 0) > 0)
 
-const INSERT_RATING = gql`
-  mutation($userId: Int!, $recipeId: uuid!, $rating: Int!) {
-    insert_recipe_ratings_one(object: { user_id: $userId, recipe_id: $recipeId, rating: $rating }) { id }
-  }
-`
-const UPDATE_RATING = gql`
-  mutation($userId: Int!, $recipeId: uuid!, $rating: Int!) {
-    update_recipe_ratings(
-      where: { user_id: { _eq: $userId }, recipe_id: { _eq: $recipeId } },
-      _set: { rating: $rating }
-    ) { affected_rows }
-  }
-`
-const { mutate: insertRating } = useMutation(INSERT_RATING)
-const { mutate: updateRating } = useMutation(UPDATE_RATING)
 const rateLoading = ref(false)
 
 async function rate(n) {
   if (!isLoggedIn.value || !userId.value) return
   rateLoading.value = true
   try {
-    await insertRating({ userId: userId.value, recipeId: route.params.id, rating: n })
-  } catch (e1) {
-    try {
-      await updateRating({ userId: userId.value, recipeId: route.params.id, rating: n })
-    } catch (e2) {
-      console.error('rating failed', e2)
+    const token = localStorage.getItem('token') || ''
+    const backendBaseUrl = useRuntimeConfig().public.NUXT_PUBLIC_BACKEND_ENDPOINT || 'http://localhost:8081'
+    const res = await fetch(`${backendBaseUrl}/recipes/${route.params.id}/rate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ rating: n })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data?.error || 'Rating request failed')
     }
+  } catch (e) {
+    console.error('rating failed', e)
   }
   rateLoading.value = false
   try { await refetch() } catch {}
 }
 
-const ADD_FAVORITE = gql`
-  mutation($recipeId: uuid!) {
-    insert_favorites_one(object: { recipe_id: $recipeId }) { id }
-  }
-`
-const REMOVE_FAVORITE = gql`
-  mutation($recipeId: uuid!) {
-    delete_favorites(where: { recipe_id: { _eq: $recipeId } }) { affected_rows }
-  }
-`
-const { mutate: addFav } = useMutation(ADD_FAVORITE)
-const { mutate: removeFav } = useMutation(REMOVE_FAVORITE)
+const backendBase = useRuntimeConfig().public.NUXT_PUBLIC_BACKEND_ENDPOINT || 'http://localhost:8081'
+const favToggling = ref(false)
 
 async function toggleFavorite() {
   if (!isLoggedIn.value || !userId.value) return
+  if (favToggling.value) return
+  favToggling.value = true
   try {
-    if (isFavorited.value) {
-      await removeFav({ recipeId: route.params.id })
-    } else {
-      await addFav({ recipeId: route.params.id })
+    const token = localStorage.getItem('token') || ''
+    const res = await fetch(`${backendBase}/recipes/${route.params.id}/favorite`, {
+      method: isFavorited.value ? 'DELETE' : 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data?.error || 'Request failed')
     }
     try { await refetch() } catch {}
   } catch (e) {
     console.error('favorite failed', e)
+  } finally {
+    favToggling.value = false
   }
 }
 </script>
