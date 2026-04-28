@@ -61,7 +61,7 @@ import CreatorCard from '~/components/CreatorCard.vue'
 // Queries (fallback to sample data if unavailable)
 // Use newest first and a network-aware fetch policy so new items appear promptly
 const { result: recResult, loading: recLoading, error: recError } = useQuery(
-  gql`query { recipes(order_by: { created_at: desc }) { id title description featured_image average_rating media(order_by: {position: asc}) { url media_type position } favorites_aggregate { aggregate { count } } } }`,
+  gql`query { recipes(order_by: { created_at: desc }) { id title description featured_image average_rating category_id category { id name slug } media(order_by: {position: asc}) { url media_type position } favorites_aggregate { aggregate { count } } } }`,
   null,
   { fetchPolicy: 'cache-and-network' }
 )
@@ -102,7 +102,7 @@ const filteredRecipes = computed(() => {
   const s = search.value.trim().toLowerCase()
   return recipes.value.filter(r => {
     const matchesSearch = !s || r.title?.toLowerCase().includes(s)
-    const matchesCategory = true
+    const matchesCategory = !selectedCategory.value || r.category?.slug === selectedCategory.value
     return matchesSearch && matchesCategory
   })
 })
